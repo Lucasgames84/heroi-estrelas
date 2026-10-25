@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Herói e Estrelas</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="theme-color" content="#1e1e2e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root { --cel: min(40px, calc((100vw - 48px) / 10), calc((100vh - 340px) / 10)); }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
+    touch-action: none; -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    background: #1e1e2e; color: #eee; font-family: sans-serif;
+    padding: 8px 8px 190px; box-sizing: border-box;
+  }
+  #sala { font-size: 16px; margin-bottom: 2px; opacity: 0.8; }
+  #contador { font-size: 16px; margin-bottom: 2px; }
+  #tiros { font-size: 16px; margin-bottom: 2px; }
+  #status { font-size: 13px; margin-bottom: 6px; opacity: 0.9; text-align: center; }
+  #vidaBox {
+    display: none; width: 260px; max-width: 80vw; height: 14px;
+    background: #444; border-radius: 8px; margin-bottom: 6px; overflow: hidden;
+  }
+  #vidaBarra { height: 100%; width: 100%; background: #e74c3c; transition: width 0.2s; }
+  #tabuleiro {
+    display: grid;
+    grid-template-columns: repeat(10, var(--cel, 40px));
+    grid-template-rows: repeat(10, var(--cel, 40px));
+    gap: 2px; padding: 4px;
+    background: #333; border-radius: 8px;
+  }
+  .celula {
+    position: relative;
+    width: var(--cel, 40px); height: var(--cel, 40px);
+    display: flex; align-items: center; justify-content: center;
+    background: #2a2a3d; border-radius: 4px;
+    font-size: calc(var(--cel, 40px) * 0.6);
+  }
+  #msg { margin-top: 12px; font-size: 24px; font-weight: bold; min-height: 32px; text-align: center; }
+  #dica { margin-top: 4px; font-size: 12px; opacity: 0.6; text-align: center; }
+
+  /* Controles de toque */
+  #controles {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); box-sizing: border-box;
+    pointer-events: none;
+  }
+  #dpad {
+    display: grid; grid-template-areas: ". cima ." "esq . dir" ". baixo .";
+    grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px); gap: 4px;
+  }
+  #acoes { display: grid; grid-template-columns: repeat(2, 76px); gap: 8px; }
+  .btn {
+    pointer-events: auto; border: none; border-radius: 12px;
+    background: #4a6cf7; color: #fff; font-size: 15px; font-weight: bold;
+    touch-action: none; -webkit-touch-callout: none;
+  }
+  .btn:disabled { background: #3d3d50; color: #7a7a8c; }
+  .seta { background: #3a3a55; font-size: 22px; }
+  #cima { grid-area: cima; } #baixo { grid-area: baixo; }
+  #esq { grid-area: esq; } #dir { grid-area: dir; }
+  .acao { height: 52px; }
+
+  /* Tela de escolha */
+  #overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75);
+    display: none; align-items: center; justify-content: center; z-index: 10; padding: 16px; box-sizing: border-box;
+  }
+  #caixa {
+    background: #2a2a3d; padding: 22px 26px; border-radius: 10px;
+    text-align: center; max-width: 420px; width: 100%; box-sizing: border-box;
+  }
+  #caixa h2 { margin: 0 0 10px; }
+  #caixa p { margin: 0 0 14px; font-size: 17px; }
+  #ovBotoes button {
+    margin: 6px; padding: 12px 16px; font-size: 16px;
+    border: none; border-radius: 8px; background: #4a6cf7; color: #fff; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div id="sala"></div>
+<div id="contador"></div>
+<div id="tiros"></div>
+<div id="status"></div>
+<div id="vidaBox"><div id="vidaBarra"></div></div>
+<div id="tabuleiro"></div>
+<div id="msg"></div>
+<div id="dica">Use as setas do teclado ou os botões na tela</div>
+
+<div id="controles">
+  <div id="dpad">
+    <button class="btn seta" id="cima" aria-label="Cima">▲</button>
+    <button class="btn seta" id="esq" aria-label="Esquerda">◀</button>
+    <button class="btn seta" id="dir" aria-label="Direita">▶</button>
+    <button class="btn seta" id="baixo" aria-label="Baixo">▼</button>
+  </div>
+  <div id="acoes">
+    <button class="btn acao" id="btnAtirar">Atirar</button>
+    <button class="btn acao" id="btnBomba">Bomba</button>
+    <button class="btn acao" id="btnLaser">Laser</button>
+  </div>
+</div>
+
+<div id="overlay"><div id="caixa"><h2 id="ovTitulo"></h2><p id="ovTexto"></p><div id="ovBotoes"></div></div></div>
+
+<script>
+  const N = 10;
+  const TIROS_INICIAIS = 2;           // tiros por sala (salas normais)
+  const TIROS_CHEFE = 3;              // tiros durante a luta com o chefe
+  const TEMPO_RESPAWN = 5000;         // ms até um inimigo eliminado reaparecer
+  const DISTANCIA_MINIMA_RESPAWN = 5; // distância mínima do herói para reaparecer
+  const TEMPO_RECARGA_CHEFE = 5000;   // ms para recarregar os tiros na luta com o chefe
+  const VIDA_CHEFE = 3;
+  const INTERVALO_CHEFE = 1200;       // ms entre movimentos do chefe
+  const TEMPO_BOMBA = 1000;           // ms até a bombinha explodir
+
+  const tab = document.getElementById('tabuleiro');
+  const msg = document.getElementById('msg');
+  const salaEl = document.getElementById('sala');
+  const contadorEl = document.getElementById('contador');
+  const tirosEl = document.getElementById('tiros');
+  const statusEl = document.getElementById('status');
+  const vidaBox = document.getElementById('vidaBox');
+  const vidaBarra = document.getElementById('vidaBarra');
+  const overlayEl = document.getElementById('overlay');
+  const ovTitulo = document.getElementById('ovTitulo');
+  const ovTexto = document.getElementById('ovTexto');
+  const ovBotoes = document.getElementById('ovBotoes');
+  const btnAtirar = document.getElementById('btnAtirar');
+  const btnBomba = document.getElementById('btnBomba');
+  const btnLaser = document.getElementById('btnLaser');
+
+  // Cachorrinho desenhado em SVG (inimigos da sala 3)
+  const CACHORRO_SVG = `
+    <svg viewBox="0 0 40 40" width="32" height="32">
+      <path d="M7 20 Q2 13 5 9" stroke="#8a5a2b" stroke-width="2.5" fill="none"/>
+      <rect x="10" y="28" width="3" height="8" fill="#8a5a2b"/>
+      <rect x="21" y="28" width="3" height="8" fill="#8a5a2b"/>
+      <ellipse cx="18" cy="24" rx="11" ry="7" fill="#c8864a"/>
+      <circle cx="29" cy="15" r="7" fill="#c8864a"/>
+      <ellipse cx="25" cy="9" rx="2.5" ry="5" fill="#8a5a2b"/>
+      <circle cx="31" cy="14" r="1.4" fill="#222"/>
+      <circle cx="36" cy="16" r="1.5" fill="#222"/>
+    </svg>`;
+
+  // Chefe: roxo, com chifres e três olhos amarelos; desenhado maior que a casa
+  const CHEFE_SVG = `
+    <svg viewBox="0 0 40 40" width="80" height="80" style="position:absolute;left:-20px;top:-20px;z-index:5;pointer-events:none">
+      <polygon points="8,14 11,2 15,13" fill="#5a1140"/>
+      <polygon points="25,13 29,2 32,14" fill="#5a1140"/>
+      <ellipse cx="20" cy="22" rx="16" ry="14" fill="#9b2c7a"/>
+      <circle cx="12" cy="18" r="3.5" fill="#ffe066"/>
+      <circle cx="20" cy="14" r="3.5" fill="#ffe066"/>
+      <circle cx="28" cy="18" r="3.5" fill="#ffe066"/>
+      <path d="M12 28 Q20 34 28 28" stroke="#222" stroke-width="2" fill="none"/>
+    </svg>`;
+
+  // Configuração de cada sala: velocidade, inimigos (posição inicial) e estrelas
+  const salas = [
+    {
+      intervalo: 1000,                                   // sala 1: inimigo mais lento
+      inimigos: [{ x: 9, y: 0 }],
+      estrelas: [{ x: 7, y: 7 }, { x: 2, y: 5 }, { x: 5, y: 2 }, { x: 8, y: 4 }, { x: 3, y: 8 }],
+    },
+    {
+      intervalo: 600,                                    // sala 2: mais rápido, 2 inimigos
+      inimigos: [{ x: 9, y: 0 }, { x: 0, y: 9 }],
+      estrelas: [{ x: 7, y: 7 }, { x: 2, y: 5 }, { x: 5, y: 2 }, { x: 8, y: 4 },
+                 { x: 3, y: 8 }, { x: 6, y: 5 }, { x: 1, y: 9 }],
+    },
+    {
+      intervalo: 600,                                    // sala 3: 3 inimigos (cachorros) + chefe
+      inimigos: [{ x: 9, y: 0 }, { x: 0, y: 9 }, { x: 9, y: 5 }],
+      estrelas: [{ x: 7, y: 7 }, { x: 2, y: 5 }, { x: 5, y: 2 }, { x: 8, y: 4 }, { x: 3, y: 8 },
+                 { x: 6, y: 5 }, { x: 1, y: 9 }, { x: 9, y: 9 }, { x: 4, y: 4 }, { x: 8, y: 1 }],
+    },
+  ];
+
+  let indiceSala = 0;
+  let heroi, inimigos, estrelas, totalEstrelas, jogoAtivo;
+  let timerInimigos, timerChefeMov, timerPendente;
+  let projetil = null;                 // no máximo um tiro na tela por vez
+  let tirosRestantes = TIROS_INICIAIS;
+  let tirosMax = TIROS_INICIAIS;
+  let geracao = 0;                     // muda a cada sala; ações de sala antiga são ignoradas
+
+  // Progresso (só na memória da aba: some ao recarregar)
+  let derrotas = 0;
+  let equipada = null;                 // 'bomba' ou 'laser'
+  let desbloqueadas = false;           // após a 3ª derrota, as duas habilidades
+  let escolhaPendente = false;
+
+  // Habilidades (uma vez por sala cada)
+  let bomba = null;                    // {x, y} enquanto a bomba não explode
+  let bombaUsada = false;
+  let laserUsada = false;
+  let efeito = null;                   // {celulas, emoji} para explosão/laser visual
+
+  // Chefe
+  let chefe = null;                    // {x, y, hp}
+  let chefeAtivo = false;
+
+  // Começa a sala informada: posiciona personagens e estrelas, liga o movimento dos inimigos
+  function iniciarSala(i) {
+    clearInterval(timerInimigos);
+    clearInterval(timerChefeMov);
+    clearTimeout(timerPendente);
+    geracao++;
+    indiceSala = i;
+    const cfg = salas[i];
+
+    heroi = { x: 0, y: 0, dx: 1, dy: 0 };   // dx/dy = direção que o herói está olhando
+    inimigos = cfg.inimigos.map(p => ({ ...p }));
+    estrelas = cfg.estrelas.map(p => ({ ...p }));
+    totalEstrelas = cfg.estrelas.length;
+    projetil = null;
+    tirosMax = TIROS_INICIAIS;
+    tirosRestantes = TIROS_INICIAIS;
+    bomba = null;
+    bombaUsada = false;
+    laserUsada = false;
+    efeito = null;
+    chefe = null;
+    chefeAtivo = false;
+
+    jogoAtivo = true;
+    msg.textContent = '';
+    vidaBox.style.display = 'none';
+    salaEl.textContent = `Sala ${i + 1} de ${salas.length}`;
+    atualizarContador();
+    atualizarTiros();
+    atualizarStatus();
+    desenhar();
+    timerInimigos = setInterval(moverInimigos, cfg.intervalo);
+  }
+
+  // Mostra quantas estrelas já foram coletadas nesta sala
+  function atualizarContador() {
+    const coletadas = totalEstrelas - estrelas.length;
+    contadorEl.textContent = `Estrelas: ${coletadas}/${totalEstrelas}`;
+  }
+
+  // Mostra quantos tiros ainda restam
+  function atualizarTiros() {
+    tirosEl.textContent = `Tiros: ${tirosRestantes}/${tirosMax}`;
+  }
+
+  // Nome de cada habilidade
+  function nomeHab(h) { return h === 'bomba' ? 'Bombinha (B)' : 'Laser (L)'; }
+
+  // Uma habilidade está disponível se foi desbloqueada ou se é a equipada
+  function habilidadeDisponivel(h) {
+    return desbloqueadas || equipada === h;
+  }
+
+  // Linha de status: derrotas e habilidades
+  function atualizarStatus() {
+    let hab;
+    if (desbloqueadas) {
+      hab = `Desbloqueadas: ${nomeHab('bomba')} e ${nomeHab('laser')}`;
+    } else if (equipada) {
+      hab = `Equipada: ${nomeHab(equipada)}`;
+    } else {
+      hab = 'Nenhuma habilidade equipada';
+    }
+    statusEl.textContent = `Derrotas: ${derrotas} · ${hab}`;
+  }
+
+  // Barra de vida do chefe
+  function atualizarVida() {
+    if (!chefe) return;
+    vidaBarra.style.width = `${(100 * chefe.hp) / VIDA_CHEFE}%`;
+  }
+
+  // Liga/desliga os botões de ação conforme o estado atual
+  function atualizarBotoes() {
+    btnAtirar.disabled = !jogoAtivo || tirosRestantes <= 0 || projetil !== null;
+    btnBomba.disabled = !jogoAtivo || bombaUsada || bomba !== null || !habilidadeDisponivel('bomba');
+    btnLaser.disabled = !jogoAtivo || laserUsada || !habilidadeDisponivel('laser');
+  }
+
+  // Mostra um texto temporário na mensagem
+  function mensagemTemporaria(texto, ms) {
+    const g = geracao;
+    msg.textContent = texto;
+    setTimeout(() => {
+      if (g === geracao && jogoAtivo) msg.textContent = '';
+    }, ms);
+  }
+
+  // Remove um inimigo eliminado e agenda o reaparecimento dele
+  function matarInimigo(idx) {
+    inimigos.splice(idx, 1);
+    agendarRespawn();
+  }
+
+  function agendarRespawn() {
+    const g = geracao;
+    setTimeout(() => respawnar(g), TEMPO_RESPAWN);
+  }
+
+  // Faz um inimigo reaparecer em posição livre e longe do herói
+  function respawnar(g) {
+    if (g !== geracao || !jogoAtivo) return;   // sala mudou ou jogo acabou: não reaparece
+    const livres = [];
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const distancia = Math.abs(x - heroi.x) + Math.abs(y - heroi.y);
+        if (distancia < DISTANCIA_MINIMA_RESPAWN) continue;
+        if (inimigos.some(e => e.x === x && e.y === y)) continue;
+        if (estrelas.some(s => s.x === x && s.y === y)) continue;
+        if (chefe && chefe.x === x && chefe.y === y) continue;
+        if (projetil && projetil.x === x && projetil.y === y) continue;
+        if (bomba && bomba.x === x && bomba.y === y) continue;
+        livres.push({ x, y });
+      }
+    }
+    if (livres.length === 0) {                 // sem espaço agora: tenta de novo em 1 segundo
+      setTimeout(() => respawnar(g), 1000);
+      return;
+    }
+    const p = livres[Math.floor(Math.random() * livres.length)];
+    inimigos.push({ x: p.x, y: p.y });
+    desenhar();
+  }
+
+  // Desenha o tabuleiro inteiro
+  function desenhar() {
+    tab.innerHTML = '';
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const c = document.createElement('div');
+        c.className = 'celula';
+        if (x === heroi.x && y === heroi.y) {
+          c.textContent = '🦸';
+        } else if (chefe && chefe.x === x && chefe.y === y) {
+          c.innerHTML = CHEFE_SVG;
+        } else if (inimigos.some(e => e.x === x && e.y === y)) {
+          // Sala 3: cachorro; salas 1 e 2: monstrinho
+          if (indiceSala === 2) c.innerHTML = CACHORRO_SVG;
+          else c.textContent = '👾';
+        } else if (efeito && efeito.celulas.some(p => p.x === x && p.y === y)) {
+          c.textContent = efeito.emoji;
+        } else if (bomba && bomba.x === x && bomba.y === y) {
+          c.textContent = '💣';
+        } else if (projetil && projetil.x === x && projetil.y === y) {
+          c.textContent = '🔸';
+        } else if (estrelas.some(s => s.x === x && s.y === y)) {
+          c.textContent = '⭐';
+        }
+        tab.appendChild(c);
+      }
+    }
+    atualizarBotoes();
+  }
+
+  // Cada inimigo anda 1 casa em direção ao herói (um eixo por vez)
+  function moverInimigos() {
+    if (!jogoAtivo) return;
+    for (const e of inimigos) {
+      if (e.x !== heroi.x) e.x += Math.sign(heroi.x - e.x);
+      else if (e.y !== heroi.y) e.y += Math.sign(heroi.y - e.y);
+    }
+    // Inimigo que andar em cima do tiro também é eliminado
+    if (projetil) {
+      const idx = inimigos.findIndex(e => e.x === projetil.x && e.y === projetil.y);
+      if (idx >= 0) { matarInimigo(idx); projetil = null; }
+    }
+    desenhar();
+    if (inimigos.some(e => e.x === heroi.x && e.y === heroi.y)) perder();
+  }
+
+  // Chefe anda 1 casa por vez em direção ao herói
+  function moverChefe() {
+    if (!jogoAtivo || !chefe) return;
+    if (chefe.x !== heroi.x) chefe.x += Math.sign(heroi.x - chefe.x);
+    else if (chefe.y !== heroi.y) chefe.y += Math.sign(heroi.y - chefe.y);
+    desenhar();
+    if (chefe.x === heroi.x && chefe.y === heroi.y) perder();
+  }
+
+  // Tiro anda 1 casa a cada 80 ms e elimina o primeiro inimigo ou chefe que atingir
+  function moverProjetil() {
+    if (!jogoAtivo || !projetil) return;
+    projetil.x += projetil.dx;
+    projetil.y += projetil.dy;
+    if (projetil.x < 0 || projetil.x >= N || projetil.y < 0 || projetil.y >= N) {
+      projetil = null;
+    } else {
+      const idx = inimigos.findIndex(e => e.x === projetil.x && e.y === projetil.y);
+      if (idx >= 0) {
+        matarInimigo(idx);
+        projetil = null;
+      } else if (chefe && chefe.x === projetil.x && chefe.y === projetil.y) {
+        projetil = null;
+        danoChefe();
+      }
+    }
+    desenhar();
+  }
+
+  // Dispara um tiro, se houver tiro disponível e nenhum outro na tela
+  function atirar() {
+    if (!jogoAtivo || projetil || tirosRestantes <= 0) return;
+    const x = heroi.x + heroi.dx;
+    const y = heroi.y + heroi.dy;
+    if (x < 0 || x >= N || y < 0 || y >= N) return;
+    tirosRestantes--;
+    atualizarTiros();
+    if (chefeAtivo && tirosRestantes === 0) agendarRecarga();
+    projetil = { x, y, dx: heroi.dx, dy: heroi.dy };
+    const idx = inimigos.findIndex(e => e.x === x && e.y === y);
+    if (idx >= 0) {
+      matarInimigo(idx);
+      projetil = null;
+    } else if (chefe && chefe.x === x && chefe.y === y) {
+      projetil = null;
+      danoChefe();
+    }
+    desenhar();
+  }
+
+  // Na luta com o chefe, os tiros voltam para o máximo depois de 5 segundos
+  function agendarRecarga() {
+    const g = geracao;
+    setTimeout(() => {
+      if (g !== geracao || !jogoAtivo || !chefeAtivo) return;
+      tirosRestantes = tirosMax;
+      atualizarTiros();
+      desenhar();
+    }, TEMPO_RECARGA_CHEFE);
+  }
+
+  // Bombinha: é lançada 2 casas à frente e explode depois de 1 segundo
+  function usarBomba() {
+    if (!jogoAtivo || bombaUsada || bomba || !habilidadeDisponivel('bomba')) return;
+    bombaUsada = true;
+    const x = Math.min(N - 1, Math.max(0, heroi.x + 2 * heroi.dx));
+    const y = Math.min(N - 1, Math.max(0, heroi.y + 2 * heroi.dy));
+    bomba = { x, y };
+    atualizarStatus();
+    desenhar();
+    const g = geracao;
+    setTimeout(() => explodirBomba(g, x, y), TEMPO_BOMBA);
+  }
+
+  // Explosão: 3x3 em volta do ponto, elimina inimigos e causa dano ao chefe
+  function explodirBomba(g, x, y) {
+    if (g !== geracao || !jogoAtivo) return;
+    bomba = null;
+    const celulas = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cx = x + dx, cy = y + dy;
+        if (cx >= 0 && cx < N && cy >= 0 && cy < N) celulas.push({ x: cx, y: cy });
+      }
+    }
+    efeito = { celulas, emoji: '💥' };
+    for (const p of celulas) {
+      let idx = inimigos.findIndex(e => e.x === p.x && e.y === p.y);
+      while (idx >= 0) {
+        matarInimigo(idx);
+        idx = inimigos.findIndex(e => e.x === p.x && e.y === p.y);
+      }
+    }
+    desenhar();
+    if (chefe && celulas.some(p => p.x === chefe.x && p.y === chefe.y)) danoChefe();
+    if (!jogoAtivo) return;
+    setTimeout(() => {
+      if (g === geracao) { efeito = null; desenhar(); }
+    }, 400);
+  }
+
+  // Laser: atinge as 2 casas à frente e elimina tudo que estiver nelas
+  function usarLaser() {
+    if (!jogoAtivo || laserUsada || !habilidadeDisponivel('laser')) return;
+    laserUsada = true;
+    atualizarStatus();
+    const celulas = [];
+    for (let k = 1; k <= 2; k++) {
+      const x = heroi.x + k * heroi.dx;
+      const y = heroi.y + k * heroi.dy;
+      if (x >= 0 && x < N && y >= 0 && y < N) celulas.push({ x, y });
+    }
+    for (const p of celulas) {
+      let idx = inimigos.findIndex(e => e.x === p.x && e.y === p.y);
+      while (idx >= 0) {
+        matarInimigo(idx);
+        idx = inimigos.findIndex(e => e.x === p.x && e.y === p.y);
+      }
+      if (chefe && chefe.x === p.x && chefe.y === p.y) danoChefe();
+    }
+    efeito = { celulas, emoji: '✨' };
+    desenhar();
+    const g = geracao;
+    setTimeout(() => {
+      if (g === geracao) { efeito = null; desenhar(); }
+    }, 300);
+  }
+
+  // Aparece o chefe quando as 10 estrelas da sala 3 são coletadas
+  function spawnChefe() {
+    if (chefeAtivo) return;
+    let melhores = [];
+    let maiorDistancia = -1;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        if (x === heroi.x && y === heroi.y) continue;
+        if (inimigos.some(e => e.x === x && e.y === y)) continue;
+        if (projetil && projetil.x === x && projetil.y === y) continue;
+        const d = Math.abs(x - heroi.x) + Math.abs(y - heroi.y);
+        if (d > maiorDistancia) { maiorDistancia = d; melhores = [{ x, y }]; }
+        else if (d === maiorDistancia) melhores.push({ x, y });
+      }
+    }
+    const p = melhores[Math.floor(Math.random() * melhores.length)];
+    chefe = { x: p.x, y: p.y, hp: VIDA_CHEFE };
+    chefeAtivo = true;
+    tirosMax = TIROS_CHEFE;
+    tirosRestantes = TIROS_CHEFE;
+    atualizarTiros();
+    atualizarVida();
+    vidaBox.style.display = 'block';
+    mensagemTemporaria('O chefe apareceu!', 2000);
+    timerChefeMov = setInterval(moverChefe, INTERVALO_CHEFE);
+    desenhar();
+  }
+
+  // Dano no chefe: cada acerto tira 1 ponto de vida
+  function danoChefe() {
+    if (!chefe) return;
+    chefe.hp--;
+    atualizarVida();
+    if (chefe.hp <= 0) vencerChefe();
+  }
+
+  // Chefe derrotado: fim do jogo
+  function vencerChefe() {
+    jogoAtivo = false;
+    clearInterval(timerInimigos);
+    clearInterval(timerChefeMov);
+    chefe = null;
+    chefeAtivo = false;
+    vidaBox.style.display = 'none';
+    msg.textContent = 'Parabéns! Você derrotou o chefe!';
+    desenhar();
+  }
+
+  // Estrelas da sala coletadas: avança de sala ou chama o chefe na sala 3
+  function todasEstrelasColetadas() {
+    if (indiceSala < salas.length - 1) {
+      vencerSala();
+    } else {
+      spawnChefe();
+    }
+  }
+
+  // Coleta de estrela: some do tabuleiro e atualiza o contador
+  function coletarEstrela() {
+    const idx = estrelas.findIndex(s => s.x === heroi.x && s.y === heroi.y);
+    if (idx >= 0) {
+      estrelas.splice(idx, 1);
+      atualizarContador();
+    }
+  }
+
+  // Todas as estrelas de uma sala (1 ou 2) coletadas: avança sozinho
+  function vencerSala() {
+    jogoAtivo = false;
+    clearInterval(timerInimigos);
+    msg.textContent = 'Sala concluída!';
+    timerPendente = setTimeout(() => iniciarSala(indiceSala + 1), 1000);
+  }
+
+  // Mostra a tela de escolha depois de uma derrota
+  function mostrarOverlay(titulo, texto, botoes) {
+    ovTitulo.textContent = titulo;
+    ovTexto.textContent = texto;
+    ovBotoes.innerHTML = '';
+    for (const b of botoes) {
+      const btn = document.createElement('button');
+      btn.textContent = b.label;
+      btn.onclick = () => {
+        overlayEl.style.display = 'none';
+        escolhaPendente = false;
+        b.onClick();
+      };
+      ovBotoes.appendChild(btn);
+    }
+    escolhaPendente = true;
+    overlayEl.style.display = 'flex';
+  }
+
+  // Derrota: conta a derrota e mostra a tela de habilidades
+  function perder() {
+    if (!jogoAtivo) return;
+    jogoAtivo = false;
+    clearInterval(timerInimigos);
+    clearInterval(timerChefeMov);
+    bomba = null;
+    efeito = null;
+    derrotas++;
+    msg.textContent = 'Você perdeu!';
+    desenhar();
+
+    const reiniciar = () => iniciarSala(0);
+
+    if (derrotas === 1) {
+      mostrarOverlay('Você perdeu!', 'Escolha sua habilidade:', [
+        { label: 'Bombinha (B)', onClick: () => { equipada = 'bomba'; reiniciar(); } },
+        { label: 'Laser (L)', onClick: () => { equipada = 'laser'; reiniciar(); } },
+      ]);
+    } else if (derrotas === 2) {
+      const atual = equipada;
+      const outra = atual === 'bomba' ? 'laser' : 'bomba';
+      mostrarOverlay('Você perdeu!', `Habilidade atual: ${nomeHab(atual)}. Quer trocar?`, [
+        { label: `Manter ${nomeHab(atual)}`, onClick: reiniciar },
+        { label: `Trocar para ${nomeHab(outra)}`, onClick: () => { equipada = outra; reiniciar(); } },
+      ]);
+    } else if (derrotas === 3) {
+      desbloqueadas = true;
+      mostrarOverlay('Você perdeu!', 'Você desbloqueou bombinha (B) e laser (L) permanentemente!', [
+        { label: 'Continuar', onClick: reiniciar },
+      ]);
+    } else {
+      mostrarOverlay('Você perdeu!', 'Tente de novo.', [
+        { label: 'Tentar de novo', onClick: reiniciar },
+      ]);
+    }
+    atualizarStatus();
+    atualizarBotoes();
+  }
+
+  // Um passo do herói: anda, pega estrela ou perde se encostar em inimigo/chefe
+  function moverHeroi(dx, dy) {
+    if (!jogoAtivo || escolhaPendente) return;
+    heroi.dx = dx;                       // guarda para qual lado o herói está virado
+    heroi.dy = dy;
+    heroi.x = Math.min(N - 1, Math.max(0, heroi.x + dx));
+    heroi.y = Math.min(N - 1, Math.max(0, heroi.y + dy));
+
+    if (inimigos.some(en => en.x === heroi.x && en.y === heroi.y) ||
+        (chefe && chefe.x === heroi.x && chefe.y === heroi.y)) {
+      desenhar();
+      perder();
+      return;
+    }
+
+    coletarEstrela();
+    desenhar();
+    if (estrelas.length === 0) todasEstrelasColetadas();
+  }
+
+  // Botão direcional: um passo ao tocar e repetição enquanto estiver segurado
+  function segurarBotao(btn, acao) {
+    let atraso = null, repeticao = null;
+    const parar = () => {
+      clearTimeout(atraso);
+      clearInterval(repeticao);
+      atraso = null;
+      repeticao = null;
+    };
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      parar();
+      acao();
+      atraso = setTimeout(() => { repeticao = setInterval(acao, 150); }, 250);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => btn.addEventListener(ev, parar));
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  segurarBotao(document.getElementById('cima'), () => moverHeroi(0, -1));
+  segurarBotao(document.getElementById('baixo'), () => moverHeroi(0, 1));
+  segurarBotao(document.getElementById('esq'), () => moverHeroi(-1, 0));
+  segurarBotao(document.getElementById('dir'), () => moverHeroi(1, 0));
+
+  // Botões de ação
+  btnAtirar.addEventListener('pointerdown', (e) => { e.preventDefault(); atirar(); });
+  btnBomba.addEventListener('pointerdown', (e) => { e.preventDefault(); usarBomba(); });
+  btnLaser.addEventListener('pointerdown', (e) => { e.preventDefault(); usarLaser(); });
+
+  // Teclado (computador)
+  document.addEventListener('keydown', (e) => {
+    if (escolhaPendente) return;                       // tela de escolha aberta
+    if (e.key === 'r' || e.key === 'R') { iniciarSala(0); return; }
+    if (!jogoAtivo) return;
+
+    if (e.key === ' ') { e.preventDefault(); atirar(); return; }
+    if (e.key === 'b' || e.key === 'B') { usarBomba(); return; }
+    if (e.key === 'l' || e.key === 'L') { usarLaser(); return; }
+
+    const teclas = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+    if (!teclas[e.key]) return;
+    e.preventDefault();
+    moverHeroi(...teclas[e.key]);
+  });
+
+  // Evita rolagem, zoom com dois dedos e gestos do navegador durante o jogo
+  document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('gesturechange', (e) => e.preventDefault());
+
+  // Tiro se move continuamente, independente das setas
+  setInterval(moverProjetil, 80);
+
+  // Registra o service worker para permitir jogar offline (PWA)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+
+  iniciarSala(0);
+</script>
+</body>
+</html>
