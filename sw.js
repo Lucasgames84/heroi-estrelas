@@ -1,6 +1,6 @@
 // Service worker: guarda o jogo para funcionar offline depois da primeira visita.
 // Ao atualizar o jogo, troque o número da versão abaixo para forçar a atualização.
-const CACHE = 'heroi-estrelas-v3';
+const CACHE = 'heroi-estrelas-v4';
 const ARQUIVOS = [
   './',
   './index.html',
@@ -30,21 +30,18 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Usa o cache primeiro; se não houver, busca na rede e guarda a cópia
+// Rede primeiro: pega a versão nova quando há internet; sem internet, usa a cópia guardada
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const rede = fetch(event.request)
-        .then((resp) => {
-          if (resp && resp.status === 200 && resp.type === 'basic') {
-            const copia = resp.clone();
-            caches.open(CACHE).then((c) => c.put(event.request, copia));
-          }
-          return resp;
-        })
-        .catch(() => cached);
-      return cached || rede;
-    })
+    fetch(event.request)
+      .then((resp) => {
+        if (resp && resp.status === 200 && resp.type === 'basic') {
+          const copia = resp.clone();
+          caches.open(CACHE).then((c) => c.put(event.request, copia));
+        }
+        return resp;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
