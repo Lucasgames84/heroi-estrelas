@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
-  :root { --cel: min(40px, calc((100vw - 48px) / 10), calc((100vh - 340px) / 10)); }
+  :root { --cel: min(40px, calc((100vw - 48px) / 10), calc((100vh - 400px) / 10)); }
   html, body {
     margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
     touch-action: none; -webkit-user-select: none; user-select: none;
@@ -26,12 +26,18 @@
   #sala { font-size: 16px; margin-bottom: 2px; opacity: 0.8; }
   #contador { font-size: 16px; margin-bottom: 2px; }
   #tiros { font-size: 16px; margin-bottom: 2px; }
-  #status { font-size: 13px; margin-bottom: 6px; opacity: 0.9; text-align: center; }
+  #status { font-size: 13px; margin-bottom: 2px; opacity: 0.9; text-align: center; }
+  #petInfo { font-size: 13px; margin-bottom: 6px; opacity: 0.9; text-align: center; }
+  /* Barra de vida do chefão: grande, no topo da arena */
   #vidaBox {
-    display: none; width: 260px; max-width: 80vw; height: 14px;
-    background: #444; border-radius: 8px; margin-bottom: 6px; overflow: hidden;
+    display: none; position: relative; width: min(92vw, 520px); height: 24px; box-sizing: border-box;
+    margin: 44px 0 6px; background: #444; border: 2px solid #000; border-radius: 8px; overflow: hidden;
   }
   #vidaBarra { height: 100%; width: 100%; background: #e74c3c; transition: width 0.2s; }
+  #vidaTexto {
+    position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: bold; color: #fff; text-shadow: 0 1px 2px #000;
+  }
   #tabuleiro {
     display: grid;
     grid-template-columns: repeat(10, var(--cel, 40px));
@@ -46,6 +52,22 @@
     background: #2a2a3d; border-radius: 4px;
     font-size: calc(var(--cel, 40px) * 0.6);
   }
+  /* Inimigo roxo (fase 1): centralizado na casa, ocupa ~65% da altura, pixel art sem suavização */
+  .celula img.monstro {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    height: 65%; width: auto; max-width: 65%;
+    image-rendering: pixelated; pointer-events: none;
+  }
+
+  /* Arena do chefão (quarta fase): chão vermelho e paredes escuras */
+  .celula.chao { background: #8e1b1b; }
+  .celula.parede { background: #120a0f; box-shadow: inset 0 0 0 2px #2b1a24; }
+  .celula.aviso { animation: piscar 0.3s infinite alternate; }
+  @keyframes piscar {
+    from { box-shadow: inset 0 0 0 3px #ffe066; }
+    to   { box-shadow: inset 0 0 0 3px #ff3b3b; }
+  }
+
   /* Sprite do herói: fundo preto da imagem some no fundo da casa */
   /* A figura ocupa o centro da imagem; a imagem é ampliada e recortada pela casa para o herói caber nela */
   .sprite {
@@ -53,8 +75,22 @@
     object-fit: contain; display: block; mix-blend-mode: lighten;
   }
   .sprite.espelhado { transform: scaleX(-1); }   /* vira a figura para a esquerda */
+  /* Pet que segue o herói: pequeno emoji no canto da casa onde ele estava */
+  .pet {
+    position: absolute; right: -2px; bottom: -4px; z-index: 3; pointer-events: none;
+    font-size: calc(var(--cel, 40px) * 0.42); line-height: 1;
+  }
   #msg { margin-top: 12px; font-size: 24px; font-weight: bold; min-height: 32px; text-align: center; }
   #dica { margin-top: 4px; font-size: 12px; opacity: 0.6; text-align: center; }
+
+  /* Botão de pausa (durante as salas) */
+  .btnPausa {
+    display: none; position: fixed; top: 8px; right: 8px; z-index: 6;
+    padding: 8px 14px; border: none; border-radius: 8px;
+    background: #3a3a55; color: #fff; font-size: 14px; font-weight: bold;
+    touch-action: manipulation;
+  }
+  .btnPausa:disabled { opacity: 0.4; }
 
   /* Controles de toque */
   #controles {
@@ -115,7 +151,30 @@
   .painel p { max-width: 420px; font-size: 16px; line-height: 1.5; }
   .painel .botaoMenu { margin-top: 20px; }
 
-  /* Tela de escolha */
+  /* Loja de pets (tela cheia, por cima do menu ou da pausa) */
+  #loja {
+    position: fixed; inset: 0; z-index: 40; background: #1e1e2e; display: none;
+    flex-direction: column; align-items: center; overflow-y: auto;
+    padding: 24px 16px; box-sizing: border-box; text-align: center;
+  }
+  #loja h2 { color: #ffe066; margin: 0 0 6px; }
+  #lojaMoedas { font-size: 20px; font-weight: bold; margin-bottom: 10px; }
+  #lojaLista { width: 100%; max-width: 440px; }
+  .cardPet {
+    display: flex; align-items: center; gap: 12px; text-align: left;
+    background: #2a2a3d; border-radius: 12px; padding: 12px; margin: 8px 0; box-sizing: border-box;
+  }
+  .petEmoji { font-size: 40px; line-height: 1; }
+  .petTexto { flex: 1; font-size: 16px; }
+  .petTexto span { display: block; font-size: 13px; opacity: 0.85; margin-top: 4px; line-height: 1.35; }
+  .btnPet {
+    border: none; border-radius: 8px; background: #4a6cf7; color: #fff;
+    font-size: 14px; font-weight: bold; padding: 10px 12px; white-space: nowrap; touch-action: manipulation;
+  }
+  .btnPet:disabled { background: #3d3d50; color: #7a7a8c; }
+  #loja .botaoMenu { margin-top: 16px; }
+
+  /* Tela de escolha (derrota) */
   #overlay {
     position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75);
     display: none; align-items: center; justify-content: center; z-index: 10; padding: 16px; box-sizing: border-box;
@@ -130,6 +189,18 @@
     margin: 6px; padding: 12px 16px; font-size: 16px;
     border: none; border-radius: 8px; background: #4a6cf7; color: #fff; cursor: pointer;
   }
+
+  /* Tela de pausa */
+  #pausa {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75);
+    display: none; align-items: center; justify-content: center; z-index: 12; padding: 16px; box-sizing: border-box;
+  }
+  #caixaPausa {
+    background: #2a2a3d; padding: 22px 26px; border-radius: 10px;
+    text-align: center; max-width: 420px; width: 100%; box-sizing: border-box;
+  }
+  #caixaPausa h2 { margin: 0 0 12px; color: #ffe066; }
+  #caixaPausa .botaoMenu { width: 220px; font-size: 17px; }
 </style>
 </head>
 <body>
@@ -141,6 +212,7 @@
   <div id="conteudoMenu">
     <h1 id="titulo">HERÓI DAS ESTRELAS</h1>
     <button class="botaoMenu" id="btnJogar">JOGAR</button>
+    <button class="botaoMenu" id="btnLoja">LOJA DE PETS</button>
     <button class="botaoMenu" id="btnComo">COMO JOGAR</button>
     <button class="botaoMenu" id="btnConfig">CONFIGURAÇÕES</button>
   </div>
@@ -153,7 +225,11 @@
       <li>Espaço ou o botão <b>Atirar</b>: tiro reto na direção em que o herói olha. São 2 tiros por sala.</li>
       <li><b>B</b> ou <b>Bomba</b>: explode 1 segundo depois, numa área 3x3. <b>L</b> ou <b>Laser</b>: atinge as 2 casas à frente. Cada habilidade vale 1 vez por sala.</li>
       <li>Habilidades: na 1ª derrota você escolhe uma. Na 2ª pode trocar ou manter. Na 3ª, as duas ficam liberadas.</li>
-      <li>Chefe: aparece na sala 3, depois que você pega todas as estrelas. Tem 3 pontos de vida, e cada acerto tira 1.</li>
+      <li>Fase 3: pegue as 10 estrelas com os cachorrinhos. Depois disso, a fase 4 é uma arena com o chefão.</li>
+      <li>Chefão (fase 4): tem 3 pontos de vida, e cada acerto tira 1. A cada 5 segundos ele avisa uma direção e dispara um tiro duplo em linha reta. Se acertar você, perde, a não ser que o cachorro ou uma vida extra bloqueie.</li>
+      <li>Moedas (🪙): cada inimigo derrotado deixa 1 moeda. Passe por cima para pegar. As moedas ficam salvas no aparelho.</li>
+      <li><b>LOJA DE PETS</b>: compre um pet com as moedas e escolha qual ele usa. Só um pet fica equipado por vez.</li>
+      <li><b>PAUSA</b> (ou tecla P / Esc): continuar, abrir a loja ou voltar ao menu principal.</li>
       <li><b>R</b> reinicia a partir da sala 1 (teclado).</li>
     </ul>
     <button class="botaoMenu btnVoltar">VOLTAR</button>
@@ -164,11 +240,30 @@
     <button class="botaoMenu btnVoltar">VOLTAR</button>
   </div>
 </div>
+
+<div id="loja">
+  <h2>LOJA DE PETS</h2>
+  <div id="lojaMoedas"></div>
+  <div id="lojaLista"></div>
+  <button class="botaoMenu" id="lojaVoltar">VOLTAR</button>
+</div>
+
+<div id="pausa">
+  <div id="caixaPausa">
+    <h2>PAUSA</h2>
+    <button class="botaoMenu" id="pausaContinuar">CONTINUAR</button>
+    <button class="botaoMenu" id="pausaLoja">LOJA DE PETS</button>
+    <button class="botaoMenu" id="pausaMenu">MENU PRINCIPAL</button>
+  </div>
+</div>
+
+<button class="btnPausa" id="btnPausa">PAUSA</button>
+<div id="vidaBox"><div id="vidaBarra"></div><span id="vidaTexto">CHEFÃO</span></div>
 <div id="sala"></div>
 <div id="contador"></div>
 <div id="tiros"></div>
 <div id="status"></div>
-<div id="vidaBox"><div id="vidaBarra"></div></div>
+<div id="petInfo"></div>
 <div id="tabuleiro"></div>
 <div id="msg"></div>
 <div id="dica">Use as setas do teclado ou os botões na tela</div>
@@ -199,6 +294,16 @@
   const VIDA_CHEFE = 3;
   const INTERVALO_CHEFE = 1200;       // ms entre movimentos do chefe
   const TEMPO_BOMBA = 1000;           // ms até a bombinha explodir
+  const TICK = 10;                    // resolução do relógio do jogo (ms); para quando há pausa ou menu
+  const TEMPO_GATO = 8000;            // Gato Ninja ataca a cada 8 s
+  const ALCANCE_GATO = 3;             // distância máxima do alvo do gato
+  const TEMPO_DRAGAO = 5000;          // Dragãozinho lança bola de fogo a cada 5 s
+  const INTERVALO_BOLA = 100;         // ms entre passos da bola de fogo
+  const CHAVE_SAVE = 'heroi-estrelas-save';
+  const PRESENTE = { x: 5, y: 5 };    // onde fica o presente da sala secreta
+  const TEMPO_DISPARO_CHEFE = 5000;   // arena: o chefão dispara a cada 5 s
+  const TEMPO_AVISO = 900;            // ms do aviso piscando antes do tiro
+  const VELOCIDADE_PROJETIL_CHEFE = 260; // ms por casa do tiro duplo (lento, para dar para desviar)
 
   const tab = document.getElementById('tabuleiro');
   const msg = document.getElementById('msg');
@@ -206,6 +311,7 @@
   const contadorEl = document.getElementById('contador');
   const tirosEl = document.getElementById('tiros');
   const statusEl = document.getElementById('status');
+  const petEl = document.getElementById('petInfo');
   const vidaBox = document.getElementById('vidaBox');
   const vidaBarra = document.getElementById('vidaBarra');
   const overlayEl = document.getElementById('overlay');
@@ -215,6 +321,28 @@
   const btnAtirar = document.getElementById('btnAtirar');
   const btnBomba = document.getElementById('btnBomba');
   const btnLaser = document.getElementById('btnLaser');
+  const btnPausa = document.getElementById('btnPausa');
+  const pausaEl = document.getElementById('pausa');
+  const lojaEl = document.getElementById('loja');
+  const lojaMoedas = document.getElementById('lojaMoedas');
+  const lojaLista = document.getElementById('lojaLista');
+
+  // Monstro da quinta fase: verde-azulado, tipo robô-alienígena, com antenas e olho de disparo (SVG próprio)
+  const MONSTRO_FINAL_SVG = `
+    <svg viewBox="0 0 40 40" width="32" height="32">
+      <line x1="13" y1="8" x2="11" y2="2" stroke="#7fffd4" stroke-width="2"/>
+      <line x1="27" y1="8" x2="29" y2="2" stroke="#7fffd4" stroke-width="2"/>
+      <circle cx="11" cy="2" r="2" fill="#ff4d6d"/>
+      <circle cx="29" cy="2" r="2" fill="#ff4d6d"/>
+      <rect x="8" y="8" width="24" height="18" rx="4" fill="#1f8a7a"/>
+      <rect x="12" y="26" width="5" height="9" fill="#145c52"/>
+      <rect x="23" y="26" width="5" height="9" fill="#145c52"/>
+      <circle cx="15" cy="16" r="4" fill="#e8fff8"/>
+      <circle cx="25" cy="16" r="4" fill="#e8fff8"/>
+      <circle cx="16" cy="16" r="2" fill="#ff4d6d"/>
+      <circle cx="24" cy="16" r="2" fill="#ff4d6d"/>
+      <rect x="15" y="21" width="10" height="2" fill="#0d3d37"/>
+    </svg>`;
 
   // Cachorrinho desenhado em SVG (inimigos da sala 3)
   const CACHORRO_SVG = `
@@ -260,15 +388,79 @@
       estrelas: [{ x: 7, y: 7 }, { x: 2, y: 5 }, { x: 5, y: 2 }, { x: 8, y: 4 }, { x: 3, y: 8 },
                  { x: 6, y: 5 }, { x: 1, y: 9 }, { x: 9, y: 9 }, { x: 4, y: 4 }, { x: 8, y: 1 }],
     },
+    {
+      arena: true,                                       // sala 4: arena do chefão, sem inimigos nem estrelas
+      intervalo: 600,
+      inimigos: [],
+      estrelas: [],
+    },
+    {
+      ultima: true,                                      // sala 5: 3 monstros que atiram; sem estrelas
+      intervalo: 800,
+      inimigos: [{ x: 9, y: 0 }, { x: 0, y: 9 }, { x: 9, y: 9 }],
+      estrelas: [],
+    },
   ];
+
+  // Pets da loja (preço em moedas; o cachorro é grátis e já começa desbloqueado)
+  const PETS = {
+    cachorro: { nome: 'Cachorro Guardião', emoji: '🐶', preco: 0,
+                desc: 'Bloqueia 1 ataque de inimigo por sala. Depois do bloqueio, só volta na próxima sala.' },
+    gato:     { nome: 'Gato Ninja', emoji: '🐱', preco: 10,
+                desc: 'A cada 8 segundos ataca o inimigo mais próximo (alcance 3).' },
+    raposa:   { nome: 'Raposa Veloz', emoji: '🦊', preco: 15,
+                desc: '+20% de velocidade enquanto estiver equipada.' },
+    dragao:   { nome: 'Dragãozinho', emoji: '🐉', preco: 20,
+                desc: 'A cada 5 segundos lança uma bola de fogo na direção em que o herói olha.' },
+  };
+  const ORDEM_PETS = ['cachorro', 'gato', 'raposa', 'dragao'];
+
+  // Progresso salvo no aparelho (moedas, pets comprados, pet equipado)
+  let moedas = 0;
+  let petsDesbloqueados = ['cachorro'];
+  let petEquipado = 'cachorro';
+
+  function carregarSave() {
+    try {
+      const d = JSON.parse(localStorage.getItem(CHAVE_SAVE) || 'null');
+      if (!d) return;
+      moedas = Number.isFinite(d.moedas) ? Math.max(0, Math.floor(d.moedas)) : 0;
+      if (Array.isArray(d.pets)) {
+        petsDesbloqueados = ['cachorro', ...d.pets.filter(p => PETS[p] && p !== 'cachorro')];
+      }
+      if (PETS[d.equipado] && petsDesbloqueados.includes(d.equipado)) petEquipado = d.equipado;
+      petPermanente = petEquipado;
+    } catch (e) {
+      // sem acesso ao armazenamento: começa do zero
+    }
+  }
+
+  function salvarSave() {
+    try {
+      localStorage.setItem(CHAVE_SAVE, JSON.stringify({
+        moedas, pets: petsDesbloqueados, equipado: petPermanente,
+      }));
+    } catch (e) {
+      // sem acesso ao armazenamento: o jogo continua, só não guarda
+    }
+  }
 
   let indiceSala = 0;
   let heroi, inimigos, estrelas, totalEstrelas, jogoAtivo;
-  let timerInimigos, timerChefeMov, timerPendente;
   let projetil = null;                 // no máximo um tiro na tela por vez
   let tirosRestantes = TIROS_INICIAIS;
   let tirosMax = TIROS_INICIAIS;
   let geracao = 0;                     // muda a cada sala; ações de sala antiga são ignoradas
+
+  // Relógio do jogo: as ações da sala são agendadas aqui e param quando o jogo está pausado
+  let relogio = 0;
+  let agendados = [];
+
+  // Estado da tela e da pausa
+  let menuAtivo = true;
+  let pausado = false;
+  let lojaAberta = false;
+  let origemLoja = 'menu';             // 'menu' ou 'pausa': para onde voltar ao fechar a loja
 
   // Progresso (só na memória da aba: some ao recarregar)
   let derrotas = 0;
@@ -280,23 +472,77 @@
   let bomba = null;                    // {x, y} enquanto a bomba não explode
   let bombaUsada = false;
   let laserUsada = false;
-  let efeito = null;                   // {celulas, emoji} para explosão/laser visual
+  let efeito = null;                   // {celulas, emoji} para explosão/laser/ataque visual
+
+  // Pets (valem só dentro da sala)
+  let escudoDisponivel = true;         // cachorro: bloqueia 1 ataque por sala
+  let petPos = null;                   // casa onde o pet está (a casa que o herói deixou)
+  let bolas = [];                      // bolas de fogo do dragãozinho
+  let projeteisChefe = [];             // tiros duplos do chefão: {cabeca, dx, dy}
+  let aviso = null;                    // aviso piscando antes do tiro: {origem, dir}
+
+  // Moedas no chão da sala (somem ao sair da sala)
+  let moedasChao = [];                 // {x, y}
+  let moedasPagas = new Set();         // ids dos inimigos que já deixaram moeda nesta sala
 
   // Chefe
   let chefe = null;                    // {x, y, hp}
   let chefeAtivo = false;
 
+  // Pets e recompensas da partida atual (somem ao voltar ao menu)
+  let petPermanente = 'cachorro';      // pet escolhido e salvo (é o que volta depois de fechar)
+  let petsPartida = [];                // pets surpresa ganhos só nesta partida
+  let vidasExtras = 0;                 // absorvem um encontro fatal; só valem nesta partida
+
+  // Escada e sala secreta
+  let escada = null;                   // {x, y}: aparece quando as estrelas das salas 1 e 2 são coletadas
+  let escadaApareceu = false;
+  let salaSecreta = false;
+  let recompensaSecreta = null;        // {tipo: 'vida' | 'moedas' | 'pet', pet?}: sorteada uma vez por visita
+  let recompensaColetada = false;
+
+  // Agenda uma ação daqui a `ms` do relógio do jogo (repetir = a cada `ms`)
+  function agendar(fn, ms, repetir = false, atraso = ms) {
+    const t = { fn, ms, repetir, quando: relogio + atraso, ativo: true };
+    agendados.push(t);
+    return t;
+  }
+
+  // Cancela tudo que estava agendado (troca de sala, derrota, vitória, menu)
+  function limparAgendados() {
+    for (const t of agendados) t.ativo = false;
+    agendados = [];
+  }
+
+  // Relógio: anda 10 ms por vez, mas não anda enquanto o jogo está pausado ou no menu
+  function tickJogo() {
+    if (pausado || menuAtivo) return;
+    relogio += TICK;
+    for (const t of agendados) {
+      if (!t.ativo || relogio < t.quando) continue;
+      if (t.repetir) t.quando += t.ms;
+      else t.ativo = false;
+      t.fn();
+    }
+    agendados = agendados.filter(t => t.ativo);
+  }
+  setInterval(tickJogo, TICK);
+
+  // O jogo está rodando: sala ativa, sem pausa, sem loja, sem tela de escolha e sem menu
+  function emJogo() {
+    return jogoAtivo && !pausado && !escolhaPendente && !lojaAberta && !menuAtivo;
+  }
+
   // Começa a sala informada: posiciona personagens e estrelas, liga o movimento dos inimigos
   function iniciarSala(i) {
-    clearInterval(timerInimigos);
-    clearInterval(timerChefeMov);
-    clearTimeout(timerPendente);
+    limparAgendados();
     geracao++;
     indiceSala = i;
     const cfg = salas[i];
 
-    heroi = { x: 0, y: 0, dx: 1, dy: 0 };   // dx/dy = direção que o herói está olhando
-    inimigos = cfg.inimigos.map(p => ({ ...p }));
+    // dx/dy = direção que o herói está olhando (na arena começa no centro, voltado para cima)
+    heroi = cfg.arena ? { x: 4, y: 7, dx: 0, dy: -1 } : { x: 0, y: 0, dx: 1, dy: 0 };
+    inimigos = cfg.inimigos.map((p, k) => ({ x: p.x, y: p.y, id: k }));
     estrelas = cfg.estrelas.map(p => ({ ...p }));
     totalEstrelas = cfg.estrelas.length;
     projetil = null;
@@ -308,22 +554,50 @@
     efeito = null;
     chefe = null;
     chefeAtivo = false;
+    escudoDisponivel = true;
+    petPos = null;
+    bolas = [];
+    moedasChao = [];                       // moedas não coletadas somem ao trocar de sala
+    moedasPagas = new Set();
+    salaSecreta = false;
+    escada = null;
+    escadaApareceu = false;
+    recompensaColetada = false;
 
     jogoAtivo = true;
     msg.textContent = '';
     vidaBox.style.display = 'none';
-    salaEl.textContent = `Sala ${i + 1} de ${salas.length}`;
+    salaEl.textContent = cfg.arena ? `Sala ${i + 1} de ${salas.length} · Chefão` : `Sala ${i + 1} de ${salas.length}`;
+
+    agendar(moverInimigos, cfg.intervalo, true);
+    agendar(gatoAtacar, TEMPO_GATO, true);
+    agendar(dispararDragao, TEMPO_DRAGAO, true);
+    agendar(moverBolas, INTERVALO_BOLA, true);
+    agendar(animarMonstros, 300, true);
+    projeteisChefe = [];
+    aviso = null;
+    if (cfg.arena) {
+      escadaApareceu = true;             // arena: sem estrelas e sem escada
+      agendar(dispararChefe, TEMPO_DISPARO_CHEFE, true);
+      agendar(moverProjeteisChefe, VELOCIDADE_PROJETIL_CHEFE, true);
+      spawnChefe();
+    }
+    if (cfg.ultima) {                      // sala 5: cada monstro atira a cada 5 s, escalonados
+      escadaApareceu = true;
+      inimigos.forEach((e, k) => agendar(() => atirarDoInimigo(e.id), 5000, true, 5000 + k * 1500));
+    }
+
     atualizarContador();
     atualizarTiros();
     atualizarStatus();
+    atualizarPetInfo();
     desenhar();
-    timerInimigos = setInterval(moverInimigos, cfg.intervalo);
   }
 
-  // Mostra quantas estrelas já foram coletadas nesta sala
+  // Mostra quantas estrelas já foram coletadas nesta sala e as moedas guardadas
   function atualizarContador() {
     const coletadas = totalEstrelas - estrelas.length;
-    contadorEl.textContent = `Estrelas: ${coletadas}/${totalEstrelas}`;
+    contadorEl.textContent = `Estrelas: ${coletadas}/${totalEstrelas} · 🪙 ${moedas}`;
   }
 
   // Mostra quantos tiros ainda restam
@@ -352,6 +626,20 @@
     statusEl.textContent = `Derrotas: ${derrotas} · ${hab}`;
   }
 
+  // Linha do pet equipado
+  function atualizarPetInfo() {
+    const p = PETS[petEquipado];
+    let extra = '';
+    if (petEquipado === 'cachorro') extra = escudoDisponivel ? ' · escudo pronto' : ' · escudo usado';
+    if (vidasExtras > 0) extra += ` · ❤️ vida extra ×${vidasExtras}`;
+    petEl.textContent = `Pet: ${p.emoji} ${p.nome}${extra}`;
+  }
+
+  // Velocidade do movimento contínuo (ms por passo); a raposa anda 20% mais rápido
+  function velocidadePasso() {
+    return petEquipado === 'raposa' ? 125 : 150;
+  }
+
   // Barra de vida do chefe
   function atualizarVida() {
     if (!chefe) return;
@@ -360,33 +648,41 @@
 
   // Liga/desliga os botões de ação conforme o estado atual
   function atualizarBotoes() {
-    btnAtirar.disabled = !jogoAtivo || tirosRestantes <= 0 || projetil !== null;
-    btnBomba.disabled = !jogoAtivo || bombaUsada || bomba !== null || !habilidadeDisponivel('bomba');
-    btnLaser.disabled = !jogoAtivo || laserUsada || !habilidadeDisponivel('laser');
+    const ativo = emJogo();
+    btnAtirar.disabled = !ativo || tirosRestantes <= 0 || projetil !== null;
+    btnBomba.disabled = !ativo || bombaUsada || bomba !== null || !habilidadeDisponivel('bomba');
+    btnLaser.disabled = !ativo || laserUsada || !habilidadeDisponivel('laser');
+    btnPausa.disabled = !jogoAtivo || pausado || escolhaPendente || menuAtivo;
   }
 
   // Mostra um texto temporário na mensagem
   function mensagemTemporaria(texto, ms) {
     const g = geracao;
     msg.textContent = texto;
-    setTimeout(() => {
+    agendar(() => {
       if (g === geracao && jogoAtivo) msg.textContent = '';
     }, ms);
   }
 
-  // Remove um inimigo eliminado e agenda o reaparecimento dele
-  function matarInimigo(idx) {
-    inimigos.splice(idx, 1);
-    agendarRespawn();
+  // Remove um inimigo e agenda o reaparecimento dele.
+  // comMoeda = false quando o inimigo só foi bloqueado pelo cachorro (não conta como derrotado).
+  function matarInimigo(idx, comMoeda = true) {
+    const [e] = inimigos.splice(idx, 1);
+    if (comMoeda && !moedasPagas.has(e.id)) {
+      moedasPagas.add(e.id);                // cada inimigo deixa no máximo 1 moeda por sala
+      moedasChao.push({ x: e.x, y: e.y });
+    }
+    if (!salas[indiceSala].ultima) agendarRespawn(e.id);   // na sala 5 os monstros não voltam
+    else if (inimigos.length === 0) vencerJogoFinal();
   }
 
-  function agendarRespawn() {
+  function agendarRespawn(id) {
     const g = geracao;
-    setTimeout(() => respawnar(g), TEMPO_RESPAWN);
+    agendar(() => respawnar(g, id), TEMPO_RESPAWN);
   }
 
-  // Faz um inimigo reaparecer em posição livre e longe do herói
-  function respawnar(g) {
+  // Faz um inimigo reaparecer em posição livre e longe do herói (mantém o mesmo id)
+  function respawnar(g, id) {
     if (g !== geracao || !jogoAtivo) return;   // sala mudou ou jogo acabou: não reaparece
     const livres = [];
     for (let y = 0; y < N; y++) {
@@ -402,11 +698,11 @@
       }
     }
     if (livres.length === 0) {                 // sem espaço agora: tenta de novo em 1 segundo
-      setTimeout(() => respawnar(g), 1000);
+      agendar(() => respawnar(g, id), 1000);
       return;
     }
     const p = livres[Math.floor(Math.random() * livres.length)];
-    inimigos.push({ x: p.x, y: p.y });
+    inimigos.push({ x: p.x, y: p.y, id });
     desenhar();
   }
 
@@ -429,11 +725,15 @@
   // Desenha o tabuleiro inteiro
   function desenhar() {
     tab.innerHTML = '';
+    const avisoCelulas = aviso ? [1, 2].map(k => ({ x: aviso.origem.x + k * aviso.dir.dx, y: aviso.origem.y + k * aviso.dir.dy })) : [];
+    const setaAviso = aviso ? (aviso.dir.dx === 1 ? '➡️' : aviso.dir.dx === -1 ? '⬅️' : aviso.dir.dy === 1 ? '⬇️' : '⬆️') : '';
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         const c = document.createElement('div');
         c.className = 'celula';
-        if (x === heroi.x && y === heroi.y) {
+        if (salas[indiceSala].arena) c.classList.add(x === 0 || y === 0 || x === N - 1 || y === N - 1 ? 'parede' : 'chao');
+        const ehHeroi = x === heroi.x && y === heroi.y;
+        if (ehHeroi) {
           // Se a imagem não carregar (arquivo fora da pasta sprites/), mostra o emoji 🦸
           const dir = direcaoHeroi();
           c.innerHTML = `<img class="sprite${dir === 'esquerda' ? ' espelhado' : ''}" src="${SPRITES_HEROI[dir]}" alt="" onerror="this.replaceWith('🦸')">`;
@@ -442,15 +742,40 @@
         } else if (inimigos.some(e => e.x === x && e.y === y)) {
           // Sala 3: cachorro; salas 1 e 2: monstrinho
           if (indiceSala === 2) c.innerHTML = CACHORRO_SVG;
+          else if (indiceSala === 0) c.innerHTML = monstroHtml();
+          else if (indiceSala === 4) c.innerHTML = MONSTRO_FINAL_SVG;
           else c.textContent = '👾';
         } else if (efeito && efeito.celulas.some(p => p.x === x && p.y === y)) {
           c.textContent = efeito.emoji;
         } else if (bomba && bomba.x === x && bomba.y === y) {
           c.textContent = '💣';
+        } else if (projeteisChefe.some(p => celulasDoProjetil(p).some(q => q.x === x && q.y === y))) {
+          const pr = projeteisChefe.find(p => celulasDoProjetil(p).some(q => q.x === x && q.y === y));
+          c.textContent = pr.tipo === 'inimigo' ? '🟣' : '🟠';
+        } else if (bolas.some(b => b.x === x && b.y === y)) {
+          c.textContent = '🔥';
         } else if (projetil && projetil.x === x && projetil.y === y) {
           c.textContent = '🔸';
         } else if (estrelas.some(s => s.x === x && s.y === y)) {
           c.textContent = '⭐';
+        } else if (escada && escada.x === x && escada.y === y) {
+          c.textContent = '🪜';
+        } else if (salaSecreta && !recompensaColetada && x === PRESENTE.x && y === PRESENTE.y) {
+          c.textContent = '🎁';
+        } else if (moedasChao.some(m => m.x === x && m.y === y)) {
+          c.textContent = '🪙';
+        }
+        // Aviso do chefão: as duas casas da linha de tiro piscam com uma seta
+        if (!ehHeroi && avisoCelulas.some(q => q.x === x && q.y === y)) {
+          c.classList.add('aviso');
+          if (!c.hasChildNodes()) c.textContent = setaAviso;
+        }
+        // Pet que segue o herói: aparece no canto da casa que o herói acabou de deixar
+        if (!ehHeroi && petPos && petPos.x === x && petPos.y === y) {
+          const badge = document.createElement('span');
+          badge.className = 'pet';
+          badge.textContent = PETS[petEquipado].emoji;
+          c.appendChild(badge);
         }
         tab.appendChild(c);
       }
@@ -471,21 +796,61 @@
       if (idx >= 0) { matarInimigo(idx); projetil = null; }
     }
     desenhar();
-    if (inimigos.some(e => e.x === heroi.x && e.y === heroi.y)) perder();
+    if (contatoFatal()) perder();
+  }
+
+  // Encostou em inimigo: o cachorro pode bloquear uma vez por sala. Retorna true se ainda é fatal.
+  function contatoFatal() {
+    while (inimigos.some(e => e.x === heroi.x && e.y === heroi.y)) {
+      if (!bloquearComCachorro()) return true;
+    }
+    return false;
+  }
+
+  // Cachorro Guardião: remove o inimigo que encostou, sem moeda, e gasta o escudo da sala
+  function bloquearComCachorro() {
+    const idx = inimigos.findIndex(e => e.x === heroi.x && e.y === heroi.y);
+    if (idx < 0) return false;
+    if (petEquipado === 'cachorro' && escudoDisponivel) {
+      escudoDisponivel = false;
+      matarInimigo(idx, false);
+      mensagemTemporaria('O cachorro bloqueou o ataque!', 1500);
+    } else if (vidasExtras > 0) {
+      vidasExtras--;
+      matarInimigo(idx, false);
+      mensagemTemporaria('Vida extra usada!', 1500);
+    } else {
+      return false;
+    }
+    atualizarPetInfo();
+    desenhar();
+    return true;
   }
 
   // Chefe anda 1 casa por vez em direção ao herói
   function moverChefe() {
     if (!jogoAtivo || !chefe) return;
+    const antes = { x: chefe.x, y: chefe.y };
     if (chefe.x !== heroi.x) chefe.x += Math.sign(heroi.x - chefe.x);
     else if (chefe.y !== heroi.y) chefe.y += Math.sign(heroi.y - chefe.y);
     desenhar();
-    if (chefe.x === heroi.x && chefe.y === heroi.y) perder();
+    if (chefe.x === heroi.x && chefe.y === heroi.y) {
+      if (vidasExtras > 0) {               // vida extra: o chefe recua uma casa e a luta continua
+        vidasExtras--;
+        chefe.x = antes.x;
+        chefe.y = antes.y;
+        mensagemTemporaria('Vida extra usada!', 1500);
+        atualizarPetInfo();
+        desenhar();
+      } else {
+        perder();
+      }
+    }
   }
 
   // Tiro anda 1 casa a cada 80 ms e elimina o primeiro inimigo ou chefe que atingir
   function moverProjetil() {
-    if (!jogoAtivo || !projetil) return;
+    if (!emJogo() || !projetil) return;
     projetil.x += projetil.dx;
     projetil.y += projetil.dy;
     if (projetil.x < 0 || projetil.x >= N || projetil.y < 0 || projetil.y >= N) {
@@ -505,7 +870,7 @@
 
   // Dispara um tiro, se houver tiro disponível e nenhum outro na tela
   function atirar() {
-    if (!jogoAtivo || projetil || tirosRestantes <= 0) return;
+    if (!emJogo() || projetil || tirosRestantes <= 0) return;
     const x = heroi.x + heroi.dx;
     const y = heroi.y + heroi.dy;
     if (x < 0 || x >= N || y < 0 || y >= N) return;
@@ -527,7 +892,7 @@
   // Na luta com o chefe, os tiros voltam para o máximo depois de 5 segundos
   function agendarRecarga() {
     const g = geracao;
-    setTimeout(() => {
+    agendar(() => {
       if (g !== geracao || !jogoAtivo || !chefeAtivo) return;
       tirosRestantes = tirosMax;
       atualizarTiros();
@@ -537,7 +902,7 @@
 
   // Bombinha: é lançada 2 casas à frente e explode depois de 1 segundo
   function usarBomba() {
-    if (!jogoAtivo || bombaUsada || bomba || !habilidadeDisponivel('bomba')) return;
+    if (!emJogo() || bombaUsada || bomba || !habilidadeDisponivel('bomba')) return;
     bombaUsada = true;
     const x = Math.min(N - 1, Math.max(0, heroi.x + 2 * heroi.dx));
     const y = Math.min(N - 1, Math.max(0, heroi.y + 2 * heroi.dy));
@@ -545,7 +910,7 @@
     atualizarStatus();
     desenhar();
     const g = geracao;
-    setTimeout(() => explodirBomba(g, x, y), TEMPO_BOMBA);
+    agendar(() => explodirBomba(g, x, y), TEMPO_BOMBA);
   }
 
   // Explosão: 3x3 em volta do ponto, elimina inimigos e causa dano ao chefe
@@ -570,14 +935,14 @@
     desenhar();
     if (chefe && celulas.some(p => p.x === chefe.x && p.y === chefe.y)) danoChefe();
     if (!jogoAtivo) return;
-    setTimeout(() => {
+    agendar(() => {
       if (g === geracao) { efeito = null; desenhar(); }
     }, 400);
   }
 
   // Laser: atinge as 2 casas à frente e elimina tudo que estiver nelas
   function usarLaser() {
-    if (!jogoAtivo || laserUsada || !habilidadeDisponivel('laser')) return;
+    if (!emJogo() || laserUsada || !habilidadeDisponivel('laser')) return;
     laserUsada = true;
     atualizarStatus();
     const celulas = [];
@@ -597,18 +962,81 @@
     efeito = { celulas, emoji: '✨' };
     desenhar();
     const g = geracao;
-    setTimeout(() => {
+    agendar(() => {
       if (g === geracao) { efeito = null; desenhar(); }
     }, 300);
   }
 
-  // Aparece o chefe quando as 10 estrelas da sala 3 são coletadas
+  // Gato Ninja: a cada 8 s ataca o inimigo mais próximo dele (alcance 3). Não causa dano ao chefe.
+  function gatoAtacar() {
+    if (petEquipado !== 'gato' || !jogoAtivo || inimigos.length === 0) return;
+    const origem = petPos || heroi;
+    let melhor = -1, menor = Infinity;
+    inimigos.forEach((e, i) => {
+      const d = Math.abs(e.x - origem.x) + Math.abs(e.y - origem.y);
+      if (d <= ALCANCE_GATO && d < menor) { menor = d; melhor = i; }
+    });
+    if (melhor < 0) return;
+    const alvo = { x: inimigos[melhor].x, y: inimigos[melhor].y };
+    efeito = { celulas: [alvo], emoji: '🐾' };
+    matarInimigo(melhor);
+    desenhar();
+    const g = geracao;
+    agendar(() => {
+      if (g === geracao) { efeito = null; desenhar(); }
+    }, 300);
+  }
+
+  // Dragãozinho: a cada 10 s lança uma bola de fogo na direção em que o herói olha
+  function dispararDragao() {
+    if (petEquipado !== 'dragao' || !jogoAtivo) return;
+    const x = heroi.x + heroi.dx;
+    const y = heroi.y + heroi.dy;
+    if (x < 0 || x >= N || y < 0 || y >= N) return;
+    bolas.push({ x, y, dx: heroi.dx, dy: heroi.dy });
+    acertosBolas();
+    desenhar();
+  }
+
+  // Bola de fogo anda 1 casa a cada 100 ms; mata o primeiro inimigo que encontrar e atravessa o chefe
+  function moverBolas() {
+    if (!jogoAtivo || bolas.length === 0) return;
+    for (const b of bolas) { b.x += b.dx; b.y += b.dy; }
+    acertosBolas();
+    desenhar();
+  }
+
+  // Remove bolas fora do tabuleiro e as que acertaram um inimigo (que é derrotado com moeda)
+  function acertosBolas() {
+    for (const b of bolas) {
+      if (b.x < 0 || b.x >= N || b.y < 0 || b.y >= N) { b.morta = true; continue; }
+      const idx = inimigos.findIndex(e => e.x === b.x && e.y === b.y);
+      if (idx >= 0) { matarInimigo(idx); b.morta = true; }
+    }
+    bolas = bolas.filter(b => !b.morta);
+  }
+
+  // Monstrinho roxo da fase 1: mostra um dos 3 quadros da animação (troca a cada 300 ms)
+  let quadroMonstro = 0;
+  function monstroHtml() {
+    // Se a imagem não carregar (ex.: pasta sprites/ incompleta), mostra o 👾 no lugar
+    return `<img class="monstro" src="sprites/inimigo-${quadroMonstro + 1}.png" alt="" onerror="this.replaceWith('👾')">`;
+  }
+
+  // Avança o quadro da animação e redesenha, só enquanto houver monstrinhos na tela
+  function animarMonstros() {
+    quadroMonstro = (quadroMonstro + 1) % 3;
+    if (jogoAtivo && indiceSala === 0 && inimigos.length > 0) desenhar();
+  }
+
+  // Aparece o chefão na arena (quarta fase), na casa livre mais distante do herói
   function spawnChefe() {
     if (chefeAtivo) return;
+    const L = limites();
     let melhores = [];
     let maiorDistancia = -1;
-    for (let y = 0; y < N; y++) {
-      for (let x = 0; x < N; x++) {
+    for (let y = L.min; y <= L.max; y++) {
+      for (let x = L.min; x <= L.max; x++) {
         if (x === heroi.x && y === heroi.y) continue;
         if (inimigos.some(e => e.x === x && e.y === y)) continue;
         if (projetil && projetil.x === x && projetil.y === y) continue;
@@ -626,7 +1054,7 @@
     atualizarVida();
     vidaBox.style.display = 'block';
     mensagemTemporaria('O chefe apareceu!', 2000);
-    timerChefeMov = setInterval(moverChefe, INTERVALO_CHEFE);
+    agendar(moverChefe, INTERVALO_CHEFE, true);
     desenhar();
   }
 
@@ -641,21 +1069,49 @@
   // Chefe derrotado: fim do jogo
   function vencerChefe() {
     jogoAtivo = false;
-    clearInterval(timerInimigos);
-    clearInterval(timerChefeMov);
+    limparAgendados();
+    projeteisChefe = [];                   // ao derrotar o chefão, os tiros dele desaparecem
+    aviso = null;
     chefe = null;
     chefeAtivo = false;
     vidaBox.style.display = 'none';
-    msg.textContent = 'Parabéns! Você derrotou o chefe!';
+    if (indiceSala === 3) {                // chefão da quarta fase: libera a quinta fase
+      msg.textContent = 'Você derrotou o chefão! Quinta fase liberada!';
+      agendar(() => iniciarSala(4), 2000);
+    } else {
+      msg.textContent = 'Parabéns! Você derrotou o chefe!';
+    }
+    desenhar();
+  }
+
+  // Quinta fase: derrotar os três monstros encerra o jogo
+  function vencerJogoFinal() {
+    jogoAtivo = false;
+    limparAgendados();
+    projeteisChefe = [];
+    aviso = null;
+    msg.textContent = 'Parabéns! Você venceu a quinta fase e zerou o jogo!';
+    desenhar();
+  }
+
+  // Quinta fase: cada monstro atira a cada 5 s na direção cardinal do herói (tiro simples, visível)
+  function atirarDoInimigo(id) {
+    const e = inimigos.find(q => q.id === id);
+    if (!jogoAtivo || !e) return;
+    const dir = direcaoParaHeroi(e);
+    const cabeca = { x: e.x + dir.dx, y: e.y + dir.dy };
+    if (!dentroDoTabuleiro(cabeca)) return;
+    projeteisChefe.push({ cabeca, dx: dir.dx, dy: dir.dy, tamanho: 1, tipo: 'inimigo' });
+    if (checarAcertoProjeteis()) return;
     desenhar();
   }
 
   // Estrelas da sala coletadas: avança de sala ou chama o chefe na sala 3
   function todasEstrelasColetadas() {
-    if (indiceSala < salas.length - 1) {
-      vencerSala();
+    if (indiceSala < 2) {
+      mostrarEscada();                     // salas 1 e 2: a escada leva à sala secreta antes da próxima fase
     } else {
-      spawnChefe();
+      vencerSala();                        // sala 3: vai direto para a arena do chefão (quarta fase)
     }
   }
 
@@ -668,12 +1124,198 @@
     }
   }
 
+  // Coleta de moedas: quem passa por cima pega; a moeda vai para o total salvo
+  function coletarMoedas() {
+    const achadas = moedasChao.filter(m => m.x === heroi.x && m.y === heroi.y).length;
+    if (achadas === 0) return;
+    moedasChao = moedasChao.filter(m => !(m.x === heroi.x && m.y === heroi.y));
+    moedas += achadas;
+    salvarSave();
+    atualizarContador();
+  }
+
+  // Área jogável: na arena a borda é parede e ninguém entra nela
+  function limites() {
+    const m = salas[indiceSala] && salas[indiceSala].arena ? 1 : 0;
+    return { min: m, max: N - 1 - m };
+  }
+
+  function dentroDoTabuleiro(c) {
+    return c.x >= 0 && c.x < N && c.y >= 0 && c.y < N;
+  }
+
+  // Direção cardinal que aponta para o herói, a partir do chefão (empate: horizontal)
+  function direcaoParaHeroi(origem = chefe) {
+    const dxT = heroi.x - origem.x, dyT = heroi.y - origem.y;
+    if (Math.abs(dxT) >= Math.abs(dyT)) return { dx: dxT >= 0 ? 1 : -1, dy: 0 };
+    return { dx: 0, dy: dyT >= 0 ? 1 : -1 };
+  }
+
+  // A cada 5 s: escolhe a direção do herói, pisca o aviso e dispara o tiro duplo
+  function dispararChefe() {
+    if (!jogoAtivo || !chefe || aviso) return;
+    const av = { origem: { x: chefe.x, y: chefe.y }, dir: direcaoParaHeroi() };
+    aviso = av;
+    desenhar();
+    agendar(() => {
+      if (aviso !== av || !jogoAtivo) return;
+      aviso = null;
+      const { origem, dir } = av;
+      projeteisChefe.push({ cabeca: { x: origem.x + 2 * dir.dx, y: origem.y + 2 * dir.dy }, dx: dir.dx, dy: dir.dy });
+      if (checarAcertoProjeteis()) return;   // já perdeu
+      desenhar();
+    }, TEMPO_AVISO);
+  }
+
+  // Tiro duplo: 2 casas em linha reta; some quando sai inteiro do tabuleiro
+  function celulasDoProjetil(p) {
+    const celulas = [p.cabeca];
+    if (p.tamanho !== 1) celulas.push({ x: p.cabeca.x - p.dx, y: p.cabeca.y - p.dy });   // tiro duplo (padrão) ou simples
+    return celulas;
+  }
+
+  function moverProjeteisChefe() {
+    if (!jogoAtivo || projeteisChefe.length === 0) return;
+    for (const p of projeteisChefe) p.cabeca = { x: p.cabeca.x + p.dx, y: p.cabeca.y + p.dy };
+    projeteisChefe = projeteisChefe.filter(p => celulasDoProjetil(p).some(dentroDoTabuleiro));
+    if (checarAcertoProjeteis()) return;
+    desenhar();
+  }
+
+  // Se algum tiro do chefão encostou no herói, aplica o dano. Retorna true se foi derrota.
+  function checarAcertoProjeteis() {
+    for (const p of [...projeteisChefe]) {
+      if (celulasDoProjetil(p).some(q => q.x === heroi.x && q.y === heroi.y)) {
+        projeteisChefe = projeteisChefe.filter(r => r !== p);
+        if (acertoProjetilChefe()) return true;
+      }
+    }
+    return false;
+  }
+
+  // Um ponto de dano: o cachorro bloqueia primeiro, depois a vida extra; sem nenhum, é derrota
+  function acertoProjetilChefe() {
+    if (petEquipado === 'cachorro' && escudoDisponivel) {
+      escudoDisponivel = false;
+      mensagemTemporaria('O cachorro bloqueou o tiro!', 1500);
+      atualizarPetInfo();
+      return false;
+    }
+    if (vidasExtras > 0) {
+      vidasExtras--;
+      mensagemTemporaria('Vida extra usada!', 1500);
+      atualizarPetInfo();
+      return false;
+    }
+    perder();
+    return true;
+  }
+
+  // Nova partida (JOGAR ou MENU PRINCIPAL): vidas extras e pets surpresa somem
+  function resetarPartida() {
+    vidasExtras = 0;
+    petsPartida = [];
+    petEquipado = petPermanente;
+  }
+
+  // Escada da sala 1 ou 2: aparece no canto mais distante do herói
+  function mostrarEscada() {
+    escadaApareceu = true;
+    escada = casaMaisLonge();
+    mensagemTemporaria('Todas as estrelas! Uma escada apareceu.', 2500);
+    desenhar();
+  }
+
+  // Casa livre mais distante do herói
+  function casaMaisLonge() {
+    let melhores = [];
+    let maiorDistancia = -1;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        if (x === heroi.x && y === heroi.y) continue;
+        if (inimigos.some(e => e.x === x && e.y === y)) continue;
+        if (projetil && projetil.x === x && projetil.y === y) continue;
+        const d = Math.abs(x - heroi.x) + Math.abs(y - heroi.y);
+        if (d > maiorDistancia) { maiorDistancia = d; melhores = [{ x, y }]; }
+        else if (d === maiorDistancia) melhores.push({ x, y });
+      }
+    }
+    return melhores[Math.floor(Math.random() * melhores.length)];
+  }
+
+  // Sorteio da recompensa (uma vez por visita): vida extra, 3 moedas ou pet surpresa.
+  // O pet surpresa é sorteado entre os que ainda não foram comprados (se todos foram, entre todos).
+  function sortearRecompensa() {
+    const tipo = ['vida', 'moedas', 'pet'][Math.floor(Math.random() * 3)];
+    if (tipo !== 'pet') return { tipo };
+    const naoComprados = ORDEM_PETS.filter(p => !petsDesbloqueados.includes(p));
+    const lista = naoComprados.length ? naoComprados : ORDEM_PETS;
+    return { tipo, pet: lista[Math.floor(Math.random() * lista.length)] };
+  }
+
+  // Sala secreta: sem inimigos nem estrelas; o herói entra pela escada e sorteia a recompensa
+  function entrarSalaSecreta() {
+    limparAgendados();
+    geracao++;
+    escada = null;
+    salaSecreta = true;
+    recompensaColetada = false;
+    recompensaSecreta = sortearRecompensa();
+    heroi = { x: 0, y: 0, dx: 1, dy: 0 };
+    inimigos = [];
+    estrelas = [];
+    totalEstrelas = 0;
+    projetil = null;
+    bomba = null;
+    efeito = null;
+    bolas = [];
+    moedasChao = [];
+    moedasPagas = new Set();
+    chefe = null;
+    chefeAtivo = false;
+    petPos = null;
+    jogoAtivo = true;
+    msg.textContent = '';
+    vidaBox.style.display = 'none';
+    salaEl.textContent = 'Sala secreta';
+    mensagemTemporaria('Sala secreta! Pegue o presente 🎁', 2500);
+    atualizarContador();
+    atualizarTiros();
+    atualizarStatus();
+    atualizarPetInfo();
+    desenhar();
+  }
+
+  // Pegar o presente: aplica a recompensa uma única vez e segue para a próxima fase
+  function pegarRecompensa() {
+    if (recompensaColetada || !recompensaSecreta) return;
+    recompensaColetada = true;
+    jogoAtivo = false;                     // nada mais acontece nesta visita
+    const r = recompensaSecreta;
+    if (r.tipo === 'vida') {
+      vidasExtras++;
+      msg.textContent = '❤️ Vida extra! Ela absorve um encontro fatal nesta partida.';
+    } else if (r.tipo === 'moedas') {
+      moedas += 3;
+      salvarSave();
+      msg.textContent = '🪙 +3 moedas!';
+    } else {
+      if (!petsPartida.includes(r.pet)) petsPartida.push(r.pet);
+      petEquipado = r.pet;
+      msg.textContent = `${PETS[r.pet].emoji} ${PETS[r.pet].nome} nesta partida!`;
+    }
+    atualizarContador();
+    atualizarPetInfo();
+    desenhar();
+    agendar(() => vencerSala(), 2000);
+  }
+
   // Todas as estrelas de uma sala (1 ou 2) coletadas: avança sozinho
   function vencerSala() {
     jogoAtivo = false;
-    clearInterval(timerInimigos);
+    limparAgendados();
     msg.textContent = 'Sala concluída!';
-    timerPendente = setTimeout(() => iniciarSala(indiceSala + 1), 1000);
+    agendar(() => iniciarSala(indiceSala + 1), 1000);
   }
 
   // Mostra a tela de escolha depois de uma derrota
@@ -699,10 +1341,10 @@
   function perder() {
     if (!jogoAtivo) return;
     jogoAtivo = false;
-    clearInterval(timerInimigos);
-    clearInterval(timerChefeMov);
+    limparAgendados();
     bomba = null;
     efeito = null;
+    bolas = [];
     derrotas++;
     msg.textContent = 'Você perdeu!';
     desenhar();
@@ -735,24 +1377,54 @@
     atualizarBotoes();
   }
 
-  // Um passo do herói: anda, pega estrela ou perde se encostar em inimigo/chefe
+  // Um passo do herói: anda, pega estrela e moeda, ou perde se encostar em inimigo/chefe
   function moverHeroi(dx, dy) {
-    if (!jogoAtivo || escolhaPendente) return;
+    if (!emJogo()) return;
     heroi.dx = dx;                       // guarda para qual lado o herói está virado
     heroi.dy = dy;
-    heroi.x = Math.min(N - 1, Math.max(0, heroi.x + dx));
-    heroi.y = Math.min(N - 1, Math.max(0, heroi.y + dy));
+    const xAntes = heroi.x, yAntes = heroi.y;
+    const L = limites();
+    const nx = Math.min(L.max, Math.max(L.min, heroi.x + dx));
+    const ny = Math.min(L.max, Math.max(L.min, heroi.y + dy));
+    if (nx !== heroi.x || ny !== heroi.y) petPos = { x: heroi.x, y: heroi.y };   // o pet segue o herói
+    heroi.x = nx;
+    heroi.y = ny;
+    if (checarAcertoProjeteis()) { desenhar(); return; }   // andar para dentro de um tiro do chefão
 
-    if (inimigos.some(en => en.x === heroi.x && en.y === heroi.y) ||
-        (chefe && chefe.x === heroi.x && chefe.y === heroi.y)) {
+    if (contatoFatal()) {
+      desenhar();
+      perder();
+      return;
+    }
+    if (chefe && chefe.x === heroi.x && chefe.y === heroi.y) {
+      if (vidasExtras > 0) {               // vida extra: o herói volta para a casa anterior
+        vidasExtras--;
+        heroi.x = xAntes;
+        heroi.y = yAntes;
+        mensagemTemporaria('Vida extra usada!', 1500);
+        atualizarPetInfo();
+        desenhar();
+        return;
+      }
       desenhar();
       perder();
       return;
     }
 
+    if (salaSecreta) {                     // sala secreta: só o presente importa
+      if (!recompensaColetada && heroi.x === PRESENTE.x && heroi.y === PRESENTE.y) pegarRecompensa();
+      desenhar();
+      return;
+    }
+    if (escada && heroi.x === escada.x && heroi.y === escada.y) {
+      entrarSalaSecreta();
+      return;
+    }
+
     coletarEstrela();
+    coletarMoedas();
     desenhar();
-    if (estrelas.length === 0) todasEstrelasColetadas();
+    if (estrelas.length === 0 && !escadaApareceu) todasEstrelasColetadas();
   }
 
   // Botão direcional: um passo ao tocar e repetição enquanto estiver segurado
@@ -768,7 +1440,7 @@
       e.preventDefault();
       parar();
       acao();
-      atraso = setTimeout(() => { repeticao = setInterval(acao, 150); }, 250);
+      atraso = setTimeout(() => { repeticao = setInterval(acao, velocidadePasso()); }, 250);
     });
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => btn.addEventListener(ev, parar));
     btn.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -784,9 +1456,134 @@
   btnBomba.addEventListener('pointerdown', (e) => { e.preventDefault(); usarBomba(); });
   btnLaser.addEventListener('pointerdown', (e) => { e.preventDefault(); usarLaser(); });
 
+  // Pausa
+  function pausar() {
+    if (!jogoAtivo || pausado || escolhaPendente || menuAtivo) return;
+    pausado = true;
+    pausaEl.style.display = 'flex';
+    atualizarBotoes();
+  }
+
+  function continuarJogo() {
+    pausado = false;
+    pausaEl.style.display = 'none';
+    atualizarBotoes();
+  }
+
+  // MENU PRINCIPAL: volta à tela inicial; a próxima partida começa na sala 1
+  function voltarAoMenu() {
+    pausado = false;
+    resetarPartida();
+    pausaEl.style.display = 'none';
+    limparAgendados();
+    jogoAtivo = false;
+    pararRepeticaoTecla();
+    iniciarMenu();
+  }
+
+  // Loja de pets: pode ser aberta pelo menu ou pela pausa
+  function abrirLoja(origem) {
+    origemLoja = origem;
+    lojaAberta = true;
+    pausaEl.style.display = 'none';
+    renderLoja();
+    lojaEl.style.display = 'flex';
+  }
+
+  function fecharLoja() {
+    lojaAberta = false;
+    lojaEl.style.display = 'none';
+    if (origemLoja === 'pausa' && pausado) pausaEl.style.display = 'flex';
+    atualizarPetInfo();
+    if (jogoAtivo) desenhar();
+    atualizarBotoes();
+  }
+
+  // Monta a lista de pets: comprar, equipar ou já equipado
+  function renderLoja() {
+    lojaMoedas.textContent = `🪙 ${moedas} moedas`;
+    lojaLista.innerHTML = '';
+    for (const id of ORDEM_PETS) {
+      const p = PETS[id];
+      const tem = petsDesbloqueados.includes(id);
+      const card = document.createElement('div');
+      card.className = 'cardPet';
+      card.innerHTML = `<div class="petEmoji">${p.emoji}</div><div class="petTexto"><b>${p.nome}</b><span>${p.desc}</span></div>`;
+      const btn = document.createElement('button');
+      btn.className = 'btnPet';
+      if (!tem && petsPartida.includes(id)) {
+        btn.textContent = petEquipado === id ? 'Equipado (partida)' : 'Equipar (partida)';
+        btn.disabled = petEquipado === id;
+        btn.onclick = () => equiparPet(id);
+      } else if (!tem) {
+        btn.textContent = `Comprar · ${p.preco} 🪙`;
+        btn.disabled = moedas < p.preco;
+        btn.onclick = () => comprarPet(id);
+      } else if (petEquipado === id) {
+        btn.textContent = 'Equipado';
+        btn.disabled = true;
+      } else {
+        btn.textContent = 'Equipar';
+        btn.onclick = () => equiparPet(id);
+      }
+      card.appendChild(btn);
+      lojaLista.appendChild(card);
+    }
+  }
+
+  function comprarPet(id) {
+    const p = PETS[id];
+    if (petsDesbloqueados.includes(id) || moedas < p.preco) return;
+    moedas -= p.preco;
+    petsDesbloqueados.push(id);
+    salvarSave();
+    renderLoja();
+  }
+
+  function equiparPet(id) {
+    const comprado = petsDesbloqueados.includes(id);
+    if (!comprado && !petsPartida.includes(id)) return;
+    petEquipado = id;
+    if (comprado) {                        // pet comprado fica salvo; pet surpresa vale só nesta partida
+      petPermanente = id;
+      salvarSave();
+    }
+    atualizarPetInfo();
+    renderLoja();
+  }
+
   // Teclado (computador)
+  const teclasMov = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+  let teclaSegurada = null;
+  let repeticaoTecla = null;           // {atraso, rep} enquanto uma seta está segurada
+
+  function pararRepeticaoTecla() {
+    if (repeticaoTecla) {
+      clearTimeout(repeticaoTecla.atraso);
+      clearInterval(repeticaoTecla.rep);
+    }
+    repeticaoTecla = null;
+    teclaSegurada = null;
+  }
+
+  // Seta segurada: um passo ao apertar e repetição enquanto estiver pressionada (velocidade do pet)
+  function iniciarRepeticaoTecla(tecla, mov) {
+    pararRepeticaoTecla();
+    teclaSegurada = tecla;
+    const atraso = setTimeout(() => {
+      if (!repeticaoTecla) return;
+      repeticaoTecla.rep = setInterval(() => moverHeroi(...mov), velocidadePasso());
+    }, 250);
+    repeticaoTecla = { atraso, rep: null };
+  }
+
   document.addEventListener('keydown', (e) => {
-    if (menuAtivo || escolhaPendente) return;          // menu inicial ou tela de escolha aberta
+    if (menuAtivo || escolhaPendente || lojaAberta) return;   // menu, loja ou tela de escolha abertos
+    if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+      if (pausado) continuarJogo(); else pausar();
+      return;
+    }
+    if (pausado) return;
     if (e.key === 'r' || e.key === 'R') { iniciarSala(0); return; }
     if (!jogoAtivo) return;
 
@@ -794,15 +1591,22 @@
     if (e.key === 'b' || e.key === 'B') { usarBomba(); return; }
     if (e.key === 'l' || e.key === 'L') { usarLaser(); return; }
 
-    const teclas = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
-    if (!teclas[e.key]) return;
+    const mov = teclasMov[e.key];
+    if (!mov) return;
     e.preventDefault();
-    moverHeroi(...teclas[e.key]);
+    if (e.repeat) return;                // a repetição é controlada pelo jogo (velocidade do pet)
+    moverHeroi(...mov);
+    iniciarRepeticaoTecla(e.key, mov);
   });
+
+  document.addEventListener('keyup', (e) => {
+    if (e.key === teclaSegurada) pararRepeticaoTecla();
+  });
+  window.addEventListener('blur', pararRepeticaoTecla);
 
   // Evita rolagem, zoom com dois dedos e gestos do navegador durante o jogo
   document.addEventListener('touchmove', (e) => {
-    if (!e.target.closest('.painel')) e.preventDefault();   // deixa rolar só os textos de ajuda
+    if (!e.target.closest('.painel, #loja')) e.preventDefault();   // deixa rolar só os textos e a loja
   }, { passive: false });
   document.addEventListener('gesturestart', (e) => e.preventDefault());
   document.addEventListener('gesturechange', (e) => e.preventDefault());
@@ -810,15 +1614,52 @@
   // Tiro se move continuamente, independente das setas
   setInterval(moverProjetil, 80);
 
-  // Registra o service worker para permitir jogar offline (PWA)
+  // Registra o service worker para permitir jogar offline (PWA) e avisa quando sai versão nova
+  let avisoAtualizacaoMostrado = false;
+  function mostrarAvisoAtualizacao(reg) {
+    if (avisoAtualizacaoMostrado) return;
+    avisoAtualizacaoMostrado = true;
+    const faixa = document.createElement('div');
+    faixa.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:60;background:#ffe066;color:#1e1e2e;' +
+      'border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;' +
+      'font-size:15px;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,.5);';
+    const texto = document.createElement('span');
+    texto.textContent = 'Nova versão do jogo disponível!';
+    const botao = document.createElement('button');
+    botao.textContent = 'ATUALIZAR';
+    botao.style.cssText = 'border:none;border-radius:8px;background:#1e1e2e;color:#ffe066;font-weight:bold;padding:8px 12px;font-size:14px;';
+    botao.onclick = () => {
+      botao.disabled = true;
+      botao.textContent = 'Atualizando...';
+      if (reg.waiting) reg.waiting.postMessage({ tipo: 'PULAR_ESPERA' });
+    };
+    faixa.appendChild(texto);
+    faixa.appendChild(botao);
+    document.body.appendChild(faixa);
+  }
+
   if ('serviceWorker' in navigator) {
+    // Quando a nova versão assume o controle, recarrega a página uma única vez
+    let recarregando = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (recarregando) return;
+      recarregando = true;
+      window.location.reload();
+    });
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        if (reg.waiting && navigator.serviceWorker.controller) mostrarAvisoAtualizacao(reg);
+        reg.addEventListener('updatefound', () => {
+          const novo = reg.installing;
+          novo.addEventListener('statechange', () => {
+            if (novo.state === 'installed' && navigator.serviceWorker.controller) mostrarAvisoAtualizacao(reg);
+          });
+        });
+      }).catch(() => {});
     });
   }
 
   // ===== Tela inicial =====
-  let menuAtivo = true;
   let animMenu = null;
   let tMenu = 0;
   let heroX = 0, heroY = 0;
@@ -922,7 +1763,10 @@
   function iniciarMenu() {
     heroiMenu.innerHTML = HEROI_VOANDO_SVG;
     menuAtivo = true;
+    pausado = false;
     telaMenu.style.display = 'flex';
+    btnPausa.style.display = 'none';
+    pausaEl.style.display = 'none';
     mostrarPainel(null);
     ajustarCanvas();
     if (!animMenu) animMenu = requestAnimationFrame(loopMenu);
@@ -931,16 +1775,26 @@
   // JOGAR: esconde o menu e começa a sala 1
   function jogar() {
     menuAtivo = false;
+    pausado = false;
+    resetarPartida();
     telaMenu.style.display = 'none';
+    btnPausa.style.display = 'block';
     iniciarSala(0);
   }
 
+  carregarSave();
   document.getElementById('cao1').innerHTML = CACHORRO_SVG;
   document.getElementById('cao2').innerHTML = CACHORRO_SVG;
   document.getElementById('btnJogar').onclick = jogar;
+  document.getElementById('btnLoja').onclick = () => abrirLoja('menu');
   document.getElementById('btnComo').onclick = () => mostrarPainel('painelComo');
   document.getElementById('btnConfig').onclick = () => mostrarPainel('painelConfig');
   document.querySelectorAll('.btnVoltar').forEach(b => { b.onclick = () => mostrarPainel(null); });
+  document.getElementById('lojaVoltar').onclick = fecharLoja;
+  document.getElementById('pausaContinuar').onclick = continuarJogo;
+  document.getElementById('pausaLoja').onclick = () => abrirLoja('pausa');
+  document.getElementById('pausaMenu').onclick = voltarAoMenu;
+  btnPausa.onclick = pausar;
   window.addEventListener('resize', () => { if (menuAtivo) ajustarCanvas(); });
 
   iniciarMenu();

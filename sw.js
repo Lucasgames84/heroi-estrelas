@@ -1,6 +1,6 @@
-// Service worker: guarda o jogo para funcionar offline depois da primeira visita.
-// Ao atualizar o jogo, troque o número da versão abaixo para forçar a atualização.
-const CACHE = 'heroi-estrelas-v4';
+// Service worker: guarda o jogo para funcionar offline e avisa quando sai versão nova.
+// Ao atualizar o jogo, troque o número da versão abaixo (a versão nova é baixada e espera o jogador aceitar).
+const CACHE = 'heroi-estrelas-v7';
 const ARQUIVOS = [
   './',
   './index.html',
@@ -12,14 +12,22 @@ const ARQUIVOS = [
   './sprites/heroi-2.jpg',
   './sprites/heroi-3.jpg',
   './sprites/heroi-4.jpg',
+  './sprites/inimigo-1.png',
+  './sprites/inimigo-2.png',
+  './sprites/inimigo-3.png',
 ];
 
+// Instalação: baixa a versão nova, mas NÃO assume sozinha (espera o jogador apertar ATUALIZAR)
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE)
       .then((cache) => Promise.allSettled(ARQUIVOS.map((a) => cache.add(a))))
-      .then(() => self.skipWaiting())
   );
+});
+
+// Quando o jogador aceita a atualização, a página manda esta mensagem
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.tipo === 'PULAR_ESPERA') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
