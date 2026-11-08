@@ -52,6 +52,7 @@
     position: absolute; left: -40%; top: -40%; width: 180%; height: 180%;
     object-fit: contain; display: block; mix-blend-mode: lighten;
   }
+  .sprite.espelhado { transform: scaleX(-1); }   /* vira a figura para a esquerda */
   #msg { margin-top: 12px; font-size: 24px; font-weight: bold; min-height: 32px; text-align: center; }
   #dica { margin-top: 4px; font-size: 12px; opacity: 0.6; text-align: center; }
 
@@ -414,7 +415,7 @@
     cima:     'sprites/heroi-1.jpg',
     baixo:    'sprites/heroi-2.jpg',
     direita:  'sprites/heroi-3.jpg',
-    esquerda: 'sprites/heroi-4.jpg',
+    esquerda: 'sprites/heroi-3.jpg',   // o desenho 4 também olha para a direita; a esquerda é o 3 espelhado
   };
 
   // Direção em que o herói está olhando (guardada no último movimento; ao parar, continua)
@@ -434,7 +435,8 @@
         c.className = 'celula';
         if (x === heroi.x && y === heroi.y) {
           // Se a imagem não carregar (arquivo fora da pasta sprites/), mostra o emoji 🦸
-          c.innerHTML = `<img class="sprite" src="${SPRITES_HEROI[direcaoHeroi()]}" alt="" onerror="this.replaceWith('🦸')">`;
+          const dir = direcaoHeroi();
+          c.innerHTML = `<img class="sprite${dir === 'esquerda' ? ' espelhado' : ''}" src="${SPRITES_HEROI[dir]}" alt="" onerror="this.replaceWith('🦸')">`;
         } else if (chefe && chefe.x === x && chefe.y === y) {
           c.innerHTML = CHEFE_SVG;
         } else if (inimigos.some(e => e.x === x && e.y === y)) {
