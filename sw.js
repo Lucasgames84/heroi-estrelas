@@ -1,6 +1,6 @@
 // Service worker: guarda o jogo para funcionar offline depois da primeira visita.
 // Ao atualizar o jogo, troque o número da versão abaixo para forçar a atualização.
-const CACHE = 'heroi-estrelas-v1';
+const CACHE = 'heroi-estrelas-v3';
 const ARQUIVOS = [
   './',
   './index.html',
@@ -8,6 +8,10 @@ const ARQUIVOS = [
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './sprites/heroi-1.jpg',
+  './sprites/heroi-2.jpg',
+  './sprites/heroi-3.jpg',
+  './sprites/heroi-4.jpg',
 ];
 
 self.addEventListener('install', (event) => {
